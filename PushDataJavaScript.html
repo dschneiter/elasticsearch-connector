@@ -125,6 +125,7 @@
 
     var index = $('#sidebar-index').val();
     var index_type = $('#sidebar-type').val();
+    var pipeline_name = $('#sidebar-pipeline').val();
     var template_name = $('#sidebar-template').val();
 
     var data_range = $('#sidebar-data-range').val();
@@ -143,7 +144,7 @@
           enableButtons();
           disableLoader();
         })
-        .pushDataToCluster(index,index_type,template_name,data_range,doc_id_range);
+        .pushDataToCluster(index,index_type,pipeline_name,template_name,data_range,doc_id_range);
   }
 
   function validateData() {
