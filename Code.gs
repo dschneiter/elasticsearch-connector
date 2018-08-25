@@ -206,7 +206,7 @@ function clearNotes() {
  * @param {String} header_range The A1 notion of the header row.
  * @param {String} data_range The A1 notion of the data rows.
  */
-function pushDataToCluster(index,index_type,template,data_range_a1,doc_id_range_a1) {
+function pushDataToCluster(index,index_type,pipeline,template,data_range_a1,doc_id_range_a1) {
   var host = getHostData();
   isValidHost(host);
 
@@ -215,6 +215,8 @@ function pushDataToCluster(index,index_type,template,data_range_a1,doc_id_range_
 
   if(!index_type) { throw "Index type cannot be empty." }
   if(index_type.indexOf(' ')>=0) { throw "Index type should not have spaces." }
+
+  if(pipeline && pipeline.indexOf(' ')>=0) { throw "Pipeline name should not have spaces." }
 
   if(template && template.indexOf(' ')>=0) { throw "Template name should not have spaces." }
 
@@ -257,6 +259,9 @@ function pushDataToCluster(index,index_type,template,data_range_a1,doc_id_range_
   }
 
   var bulkList = [];
+  var endpoint = ['/',index,'/',index_type,'/_bulk'].join('');
+  if(pipeline) { endpoint = [endpoint,'?pipeline=',pipeline].join(''); }  
+
   if(template) { createTemplate(host,index,template); }
   var did_send_some_data = false;
   for(var r=0;r<data.length;r++) {
@@ -272,22 +277,22 @@ function pushDataToCluster(index,index_type,template,data_range_a1,doc_id_range_
         if(!doc_id_data[r][0]) {
           throw "Missing document id for data row: "+(r+1);
         }
-        bulkList.push(JSON.stringify({ "update" : { "_index" : index, "_type" : index_type, "_id" : doc_id_data[r][0], "_retry_on_conflict" : 3 } }));
+        bulkList.push(JSON.stringify({ "update" : { "_id" : doc_id_data[r][0], "_retry_on_conflict" : 3 } }));
         bulkList.push(JSON.stringify({ doc: toInsert, detect_noop: true, doc_as_upsert: true }));
       } else {
-        bulkList.push(JSON.stringify({ "index" : { "_index" : index, "_type" : index_type } }));
+        bulkList.push(JSON.stringify({ "index" : {  } }));
         bulkList.push(JSON.stringify(toInsert));
       }
       did_send_some_data = true;
       // Don't hit the UrlFetchApp limits of 10MB for POST calls.
       if(bulkList.length >= 2000) {
-        postDataToES(host,bulkList.join("\n")+"\n");
+        postDataToES(host,endpoint,bulkList.join("\n")+"\n");
         bulkList = [];
       }
     }
   }
   if(bulkList.length > 0) {
-    postDataToES(host,bulkList.join("\n")+"\n");
+    postDataToES(host,endpoint,bulkList.join("\n")+"\n");
     did_send_some_data = true;
   }
   if(!did_send_some_data) {
@@ -322,7 +327,7 @@ function createTemplate(host,index,template_name) {
   if(resp.getResponseCode() == 404) {
     options = getDefaultOptions(host.username,host.password);
     options.method = 'POST';
-    default_template.template = index;
+    default_template.index_pattern = index;
     options['payload'] = JSON.stringify(default_template);
     options.headers["Content-Type"] = "application/json";
     options['muteHttpExceptions'] = true;
@@ -352,11 +357,12 @@ function createTemplate(host,index,template_name) {
  * Posts data to the ES cluster using the /_bulk endpoint
  *
  * @param {Object} host The set of parameters needed to connect to a cluster - required.
+ * @param {String} endpoint The request endpoint - required.
  * @param {Array} data The data to push in an array of JSON strings - required.
  */
-function postDataToES(host,data) {
+function postDataToES(host,endpoint,data) {
   var url = [(host.use_ssl) ? 'https://' : 'http://',
-             host.host,':',host.port,'/_bulk'].join('');
+             host.host,':',host.port,endpoint].join('');
   var options = getDefaultOptions(host.username,host.password);
   options.method = 'POST';
   options['payload'] = data;
@@ -415,13 +421,13 @@ function isValidHost(host) {
 }
 
 /**
- * This is the default template to use. The template ke will
+ * This is the default template to use. The template will
  * be relaced with the index name if required.
  *
  */
 var default_template = {
   "order": 0,
-  "template": "", // will be replaced with index name
+  "index_patterns": "", // will be replaced with index name
   "settings": {
     "index.refresh_interval": "5s",
     "index.analysis.analyzer.default.type": "standard",
@@ -429,6 +435,7 @@ var default_template = {
     "index.number_of_shards": "1",
     "index.analysis.analyzer.default.stopwords": "_none_"
   },
+/*
   "mappings": {
     "_default_": {
       "dynamic_templates": [
@@ -442,8 +449,7 @@ var default_template = {
                 "keyword": {
                   "type": "keyword",
                   "ignore_above": 256
-                },
-              }
+                }
               }
             }
           }
@@ -451,5 +457,6 @@ var default_template = {
       ]
     }
   },
+*/
   "aliases": {}
 };
